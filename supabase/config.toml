@@ -1,1 +1,7 @@
 project_id = "illxtkxtfneaanlteats"
+
+[functions.payhero-stk-push]
+verify_jwt = false
+
+[functions.payhero-callback]
+verify_jwt = false
