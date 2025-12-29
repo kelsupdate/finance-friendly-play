@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -12,6 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { CheckCircle, Loader2, Phone, XCircle, Shield, Wallet } from 'lucide-react';
 import mpesaLogo from '@/assets/mpesa-logo.png';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 
 export default function Payment() {
   const { user, loading } = useAuth();
@@ -24,6 +25,8 @@ export default function Payment() {
   const [paymentStatus, setPaymentStatus] = useState<'idle' | 'processing' | 'success' | 'failed'>('idle');
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [showPhoneInput, setShowPhoneInput] = useState(false);
+  const [currentExternalRef, setCurrentExternalRef] = useState<string | null>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
 
   const loanApplicationId = location.state?.loanApplicationId;
   const activationFee = 500;
@@ -39,6 +42,15 @@ export default function Payment() {
       fetchUserPhone();
     }
   }, [user]);
+
+  // Cleanup realtime subscription on unmount
+  useEffect(() => {
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+      }
+    };
+  }, []);
 
   const fetchUserPhone = async () => {
     const { data } = await supabase
@@ -62,6 +74,82 @@ export default function Payment() {
       return;
     }
     setShowPhoneInput(true);
+  };
+
+  // Subscribe to realtime payment updates
+  const subscribeToPaymentUpdates = (externalReference: string) => {
+    console.log('Subscribing to payment updates for:', externalReference);
+    
+    // Remove existing channel if any
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+    }
+
+    const channel = supabase
+      .channel(`payment-${externalReference}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'payments',
+          filter: `external_reference=eq.${externalReference}`,
+        },
+        async (payload) => {
+          console.log('Payment update received:', payload);
+          const newStatus = payload.new.status;
+
+          if (newStatus === 'completed') {
+            setPaymentStatus('success');
+            setProcessing(false);
+            
+            if (loanApplicationId) {
+              await supabase
+                .from('loan_applications')
+                .update({ payment_verified: true })
+                .eq('id', loanApplicationId);
+            }
+
+            toast({
+              title: 'Payment Successful!',
+              description: 'Your account has been activated.',
+            });
+
+            // Cleanup subscription
+            supabase.removeChannel(channel);
+          } else if (newStatus === 'failed') {
+            setPaymentStatus('failed');
+            setProcessing(false);
+            toast({
+              title: 'Payment Failed',
+              description: 'The payment was not completed. Please try again.',
+              variant: 'destructive',
+            });
+
+            // Cleanup subscription
+            supabase.removeChannel(channel);
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('Subscription status:', status);
+      });
+
+    channelRef.current = channel;
+
+    // Set a timeout fallback (60 seconds)
+    setTimeout(() => {
+      if (processing && paymentStatus === 'processing') {
+        setPaymentStatus('failed');
+        setProcessing(false);
+        toast({
+          title: 'Payment Timeout',
+          description: 'Payment verification timed out. Please check your M-Pesa and try again if needed.',
+          variant: 'destructive',
+        });
+        supabase.removeChannel(channel);
+      }
+    }, 60000);
   };
 
   const initiateSTKPush = async () => {
@@ -110,12 +198,15 @@ export default function Payment() {
       if (error) throw error;
 
       if (data.success) {
+        setCurrentExternalRef(data.external_reference);
+        
         toast({
           title: 'STK Push Sent!',
           description: 'Please check your phone and enter your M-Pesa PIN to complete payment.',
         });
 
-        pollPaymentStatus(data.external_reference);
+        // Subscribe to realtime updates
+        subscribeToPaymentUpdates(data.external_reference);
       } else {
         throw new Error(data.message || 'Failed to initiate payment');
       }
@@ -129,64 +220,6 @@ export default function Payment() {
         variant: 'destructive',
       });
     }
-  };
-
-  const pollPaymentStatus = async (externalReference: string) => {
-    let attempts = 0;
-    const maxAttempts = 30;
-
-    const checkStatus = async () => {
-      attempts++;
-      
-      const { data } = await supabase
-        .from('payments')
-        .select('status')
-        .eq('external_reference', externalReference)
-        .maybeSingle();
-
-      if (data?.status === 'completed') {
-        setPaymentStatus('success');
-        setProcessing(false);
-        
-        if (loanApplicationId) {
-          await supabase
-            .from('loan_applications')
-            .update({ payment_verified: true })
-            .eq('id', loanApplicationId);
-        }
-
-        toast({
-          title: 'Payment Successful!',
-          description: 'Your account has been activated.',
-        });
-        return;
-      }
-
-      if (data?.status === 'failed') {
-        setPaymentStatus('failed');
-        setProcessing(false);
-        toast({
-          title: 'Payment Failed',
-          description: 'The payment was not completed. Please try again.',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      if (attempts < maxAttempts) {
-        setTimeout(checkStatus, 2000);
-      } else {
-        setPaymentStatus('failed');
-        setProcessing(false);
-        toast({
-          title: 'Payment Timeout',
-          description: 'Payment verification timed out. Please check your M-Pesa and try again if needed.',
-          variant: 'destructive',
-        });
-      }
-    };
-
-    setTimeout(checkStatus, 3000);
   };
 
   const resetPayment = () => {
