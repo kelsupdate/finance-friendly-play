@@ -13,6 +13,9 @@ serve(async (req) => {
   }
 
   try {
+    // Log request headers for debugging
+    console.log('Request headers:', Object.fromEntries(req.headers.entries()));
+
     const { amount, phone_number, loan_application_id, user_id } = await req.json();
 
     console.log('PayHero STK Push request:', { amount, phone_number, loan_application_id, user_id });
@@ -50,7 +53,7 @@ serve(async (req) => {
     const payheroPayload = {
       amount: amount,
       phone_number: phone_number,
-      channel_id: 4380, // Account 1
+      channel_id: 4691, // Account 1
       provider: "m-pesa",
       external_reference: externalReference,
       customer_name: user_id,

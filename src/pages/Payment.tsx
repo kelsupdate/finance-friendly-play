@@ -69,6 +69,17 @@ export default function Payment() {
       return;
     }
 
+    // Check if user is authenticated
+    if (!user) {
+      toast({
+        title: 'Authentication Required',
+        description: 'Please log in to continue with payment.',
+        variant: 'destructive',
+      });
+      navigate('/auth');
+      return;
+    }
+
     // Format phone number to 254XXXXXXXXX
     let formattedPhone = phoneNumber.replace(/\s/g, '');
     if (formattedPhone.startsWith('0')) {
@@ -80,6 +91,9 @@ export default function Payment() {
     }
 
     setProcessing(true);
+
+    console.log('Initiating STK push with user:', user.id);
+    console.log('Session check:', await supabase.auth.getSession());
 
     try {
       const { data, error } = await supabase.functions.invoke('payhero-stk-push', {
