@@ -26,10 +26,22 @@ export default function Payment() {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [showPhoneInput, setShowPhoneInput] = useState(false);
   const [currentExternalRef, setCurrentExternalRef] = useState<string | null>(null);
+
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const timeoutRef = useRef<number | null>(null);
+  const processingRef = useRef(false);
+  const statusRef = useRef<'idle' | 'processing' | 'success' | 'failed'>('idle');
 
   const loanApplicationId = location.state?.loanApplicationId;
   const activationFee = 500;
+
+  useEffect(() => {
+    processingRef.current = processing;
+  }, [processing]);
+
+  useEffect(() => {
+    statusRef.current = paymentStatus;
+  }, [paymentStatus]);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -46,6 +58,9 @@ export default function Payment() {
   // Cleanup realtime subscription on unmount
   useEffect(() => {
     return () => {
+      if (timeoutRef.current) {
+        window.clearTimeout(timeoutRef.current);
+      }
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
       }
@@ -76,13 +91,61 @@ export default function Payment() {
     setShowPhoneInput(true);
   };
 
+  const applyTerminalStatus = async (newStatus: 'completed' | 'failed', channel?: RealtimeChannel) => {
+    if (timeoutRef.current) {
+      window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+
+    if (newStatus === 'completed') {
+      setPaymentStatus('success');
+      setProcessing(false);
+
+      if (loanApplicationId) {
+        await supabase
+          .from('loan_applications')
+          .update({ payment_verified: true })
+          .eq('id', loanApplicationId);
+      }
+
+      toast({
+        title: 'Payment Successful!',
+        description: 'Your account has been activated.',
+      });
+    } else {
+      setPaymentStatus('failed');
+      setProcessing(false);
+
+      toast({
+        title: 'Payment Failed',
+        description: 'The payment was not completed. Please try again.',
+        variant: 'destructive',
+      });
+    }
+
+    if (channel) {
+      supabase.removeChannel(channel);
+      if (channelRef.current === channel) {
+        channelRef.current = null;
+      }
+    }
+  };
+
   // Subscribe to realtime payment updates
   const subscribeToPaymentUpdates = (externalReference: string) => {
     console.log('Subscribing to payment updates for:', externalReference);
-    
+
+    setCurrentExternalRef(externalReference);
+
+    if (timeoutRef.current) {
+      window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+
     // Remove existing channel if any
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
     }
 
     const channel = supabase
@@ -97,49 +160,36 @@ export default function Payment() {
         },
         async (payload) => {
           console.log('Payment update received:', payload);
-          const newStatus = payload.new.status;
-
-          if (newStatus === 'completed') {
-            setPaymentStatus('success');
-            setProcessing(false);
-            
-            if (loanApplicationId) {
-              await supabase
-                .from('loan_applications')
-                .update({ payment_verified: true })
-                .eq('id', loanApplicationId);
-            }
-
-            toast({
-              title: 'Payment Successful!',
-              description: 'Your account has been activated.',
-            });
-
-            // Cleanup subscription
-            supabase.removeChannel(channel);
-          } else if (newStatus === 'failed') {
-            setPaymentStatus('failed');
-            setProcessing(false);
-            toast({
-              title: 'Payment Failed',
-              description: 'The payment was not completed. Please try again.',
-              variant: 'destructive',
-            });
-
-            // Cleanup subscription
-            supabase.removeChannel(channel);
+          const newStatus = (payload.new as any)?.status as string | undefined;
+          if (newStatus === 'completed' || newStatus === 'failed') {
+            await applyTerminalStatus(newStatus, channel);
           }
         }
       )
-      .subscribe((status) => {
+      .subscribe(async (status) => {
         console.log('Subscription status:', status);
+        if (status === 'SUBSCRIBED') {
+          // Prevent missing the event if callback finished before we subscribed
+          const { data, error } = await supabase
+            .from('payments')
+            .select('status')
+            .eq('external_reference', externalReference)
+            .maybeSingle();
+
+          if (!error) {
+            const existing = data?.status;
+            if (existing === 'completed' || existing === 'failed') {
+              await applyTerminalStatus(existing, channel);
+            }
+          }
+        }
       });
 
     channelRef.current = channel;
 
-    // Set a timeout fallback (60 seconds)
-    setTimeout(() => {
-      if (processing && paymentStatus === 'processing') {
+    // Timeout fallback (90 seconds)
+    timeoutRef.current = window.setTimeout(() => {
+      if (processingRef.current && statusRef.current === 'processing') {
         setPaymentStatus('failed');
         setProcessing(false);
         toast({
@@ -148,8 +198,11 @@ export default function Payment() {
           variant: 'destructive',
         });
         supabase.removeChannel(channel);
+        if (channelRef.current === channel) {
+          channelRef.current = null;
+        }
       }
-    }, 60000);
+    }, 90000);
   };
 
   const initiateSTKPush = async () => {

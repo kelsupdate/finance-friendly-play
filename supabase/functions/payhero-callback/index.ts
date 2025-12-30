@@ -21,23 +21,49 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Extract payment details from callback
-    const externalReference = payload.external_reference || payload.ExternalReference;
-    const resultCode = payload.result_code || payload.ResultCode;
+    // Extract payment details from callback (PayHero may wrap fields inside `response`)
+    const responsePayload =
+      payload && typeof payload === 'object' && 'response' in payload && payload.response && typeof payload.response === 'object'
+        ? payload.response
+        : payload;
+
+    const externalReference =
+      (responsePayload as any).external_reference ??
+      (responsePayload as any).ExternalReference ??
+      (payload as any).external_reference ??
+      (payload as any).ExternalReference;
+
+    const resultCode =
+      (responsePayload as any).result_code ??
+      (responsePayload as any).ResultCode ??
+      (payload as any).result_code ??
+      (payload as any).ResultCode;
+
+    const checkoutRequestId =
+      (responsePayload as any).checkout_request_id ??
+      (responsePayload as any).CheckoutRequestID ??
+      (payload as any).checkout_request_id ??
+      (payload as any).CheckoutRequestID ??
+      null;
+
     const status = resultCode === 0 || resultCode === '0' ? 'completed' : 'failed';
 
     if (!externalReference) {
       console.error('No external reference in callback');
+      // Return 200 so provider doesn't keep retrying a permanently malformed payload
       return new Response(
         JSON.stringify({ success: false, message: 'No external reference' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    const updateFields: Record<string, unknown> = { status };
+    if (checkoutRequestId) updateFields.checkout_request_id = checkoutRequestId;
 
     // Update payment status
     const { error: updateError } = await supabase
       .from('payments')
-      .update({ status })
+      .update(updateFields)
       .eq('external_reference', externalReference);
 
     if (updateError) {
