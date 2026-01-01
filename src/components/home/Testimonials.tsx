@@ -15,10 +15,8 @@ export function Testimonials() {
     { id: 'community', label: 'Community', icon: '🤝' }
   ];
 
-  const filteredTestimonials = TESTIMONIALS.filter(testimonial => {
-    if (activeCategory === 'all') return true;
-    return testimonial.category === activeCategory;
-  });
+  // Show all testimonials since TESTIMONIALS doesn't have category
+  const filteredTestimonials = TESTIMONIALS;
 
   return (
     <section id="testimonials" className="py-20 bg-gradient-to-b from-black via-gray-900 to-black relative overflow-hidden">
@@ -117,21 +115,15 @@ export function Testimonials() {
               className="bg-gradient-to-b from-gray-900/80 to-black/80 backdrop-blur-sm border border-gray-800 rounded-2xl overflow-hidden shadow-xl hover:shadow-2xl hover:shadow-green-500/10 hover:border-green-500/30 transition-all duration-500 hover:-translate-y-2 group"
             >
               <CardContent className="p-8">
-                {/* Quote Icon */}
-                <div className="flex justify-between items-start mb-6">
-                  <Quote className="h-10 w-10 text-green-500/30 group-hover:text-green-500/50 transition-colors duration-300" />
-                  
-                  {/* Category Badge */}
-                  <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    testimonial.category === 'students' 
-                      ? 'bg-green-600/20 text-green-400 border border-green-500/30'
-                      : testimonial.category === 'entrepreneurs'
-                      ? 'bg-red-600/20 text-red-400 border border-red-500/30'
-                      : 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
-                  }`}>
-                    {testimonial.category?.charAt(0).toUpperCase() + testimonial.category?.slice(1) || 'Success Story'}
+                  {/* Quote Icon */}
+                  <div className="flex justify-between items-start mb-6">
+                    <Quote className="h-10 w-10 text-green-500/30 group-hover:text-green-500/50 transition-colors duration-300" />
+                    
+                    {/* Category Badge */}
+                    <div className="px-3 py-1 rounded-full text-xs font-medium bg-green-600/20 text-green-400 border border-green-500/30">
+                      Success Story
+                    </div>
                   </div>
-                </div>
                 
                 {/* Quote */}
                 <p className="text-gray-200 mb-6 italic text-lg leading-relaxed">
@@ -161,14 +153,6 @@ export function Testimonials() {
                         <p className="text-sm text-gray-400">{testimonial.location}</p>
                       </div>
                       
-                      {/* Age/Achievement */}
-                      {testimonial.age && (
-                        <div className="mt-2">
-                          <span className="inline-block px-2 py-1 bg-gray-900/50 rounded text-xs text-gray-300">
-                            Age {testimonial.age} • {testimonial.achievement || 'Youth Success'}
-                          </span>
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>

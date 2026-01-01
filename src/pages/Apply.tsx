@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { KENYA_COUNTIES, LOAN_TYPES, LOAN_AMOUNTS, EMPLOYMENT_STATUS, INCOME_RANGES, YOUTH_PROGRAMS } from '@/lib/constants';
+import { KENYA_COUNTIES, LOAN_TYPES, LOAN_AMOUNTS, EMPLOYMENT_STATUS, INCOME_RANGES } from '@/lib/constants';
 import { 
   FileText, 
   Target, 

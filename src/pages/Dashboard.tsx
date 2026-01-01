@@ -218,59 +218,59 @@ export default function Dashboard() {
                 <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-green-500 rounded-bl-lg"></div>
                 <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-green-500 rounded-br-lg"></div>
                 
-                <CardContent className="p-8">
+                <CardContent className="p-4 sm:p-8">
                   <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
-                    <div className="w-20 h-20 bg-gradient-to-br from-green-600 to-green-700 rounded-full flex items-center justify-center">
-                      <User className="h-10 w-10 text-white" />
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-green-600 to-green-700 rounded-full flex items-center justify-center flex-shrink-0">
+                      <User className="h-8 w-8 sm:h-10 sm:w-10 text-white" />
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0 w-full">
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div>
-                          <h2 className="text-2xl font-bold text-white">{profile?.full_name || 'User'}</h2>
-                          <div className="flex items-center gap-4 mt-2">
-                            <div className="flex items-center gap-2">
-                              <Mail className="h-4 w-4 text-gray-400" />
-                              <span className="text-gray-300">{user?.email}</span>
+                        <div className="min-w-0">
+                          <h2 className="text-xl sm:text-2xl font-bold text-white truncate">{profile?.full_name || 'User'}</h2>
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Mail className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                              <span className="text-gray-300 text-sm truncate">{user?.email}</span>
                             </div>
                             <div className="flex items-center gap-2">
-                              <Phone className="h-4 w-4 text-gray-400" />
-                              <span className="text-gray-300">{profile?.phone_number || 'Not set'}</span>
+                              <Phone className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                              <span className="text-gray-300 text-sm">{profile?.phone_number || 'Not set'}</span>
                             </div>
                           </div>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-shrink-0">
                           <Button 
                             variant="outline" 
                             onClick={() => navigate('/profile')}
-                            className="border border-gray-700 bg-gray-900/50 text-white hover:bg-gray-800"
+                            className="border border-gray-700 bg-gray-900/50 text-white hover:bg-gray-800 text-sm"
                           >
                             Edit Profile
                           </Button>
                           <Button 
                             variant="ghost" 
                             onClick={handleLogout}
-                            className="text-gray-400 hover:text-red-400 hover:bg-red-600/10"
+                            className="text-gray-400 hover:text-red-400 hover:bg-red-600/10 text-sm"
                           >
                             Logout
                           </Button>
                         </div>
                       </div>
                       
-                      <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="bg-gray-900/50 rounded-xl p-4">
-                          <p className="text-sm text-gray-400 mb-1">Account Status</p>
-                          <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                            <span className="text-green-400 font-bold">Active</span>
+                      <div className="mt-6 grid grid-cols-3 gap-2 sm:gap-4">
+                        <div className="bg-gray-900/50 rounded-xl p-3 sm:p-4">
+                          <p className="text-xs sm:text-sm text-gray-400 mb-1">Status</p>
+                          <div className="flex items-center gap-1 sm:gap-2">
+                            <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0"></div>
+                            <span className="text-green-400 font-bold text-sm sm:text-base">Active</span>
                           </div>
                         </div>
-                        <div className="bg-gray-900/50 rounded-xl p-4">
-                          <p className="text-sm text-gray-400 mb-1">Total Loans</p>
-                          <p className="text-lg font-bold text-white">{loans.length}</p>
+                        <div className="bg-gray-900/50 rounded-xl p-3 sm:p-4">
+                          <p className="text-xs sm:text-sm text-gray-400 mb-1">Loans</p>
+                          <p className="text-base sm:text-lg font-bold text-white">{loans.length}</p>
                         </div>
-                        <div className="bg-gray-900/50 rounded-xl p-4">
-                          <p className="text-sm text-gray-400 mb-1">Member Type</p>
-                          <p className="text-lg font-bold text-green-400">Standard</p>
+                        <div className="bg-gray-900/50 rounded-xl p-3 sm:p-4">
+                          <p className="text-xs sm:text-sm text-gray-400 mb-1">Type</p>
+                          <p className="text-sm sm:text-lg font-bold text-green-400">Standard</p>
                         </div>
                       </div>
                     </div>
