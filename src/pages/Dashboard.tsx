@@ -396,13 +396,12 @@ export default function Dashboard() {
                 </Button>
                 
                 <Button 
-                  variant="outline"
                   onClick={() => navigate('/payment')}
-                  className="border border-gray-700 bg-gray-900/50 text-white hover:bg-gray-800 h-auto py-4"
+                  className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white h-auto py-4 shadow-lg shadow-red-500/20 border-0 animate-pulse hover:animate-none"
                 >
                   <div className="flex flex-col items-center gap-2">
-                    <CreditCard className="h-5 w-5" />
-                    <span>Make a Payment</span>
+                    <CreditCard className="h-6 w-6" />
+                    <span className="font-bold text-lg">Pay Loan</span>
                   </div>
                 </Button>
                 
