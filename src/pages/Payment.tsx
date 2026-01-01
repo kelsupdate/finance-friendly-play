@@ -41,11 +41,18 @@ export default function Payment() {
   const [paymentStatus, setPaymentStatus] = useState<'idle' | 'processing' | 'success' | 'failed'>('idle');
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [showPhoneInput, setShowPhoneInput] = useState(false);
+  const [customAmount, setCustomAmount] = useState<number>(0);
 
   const loanApplicationId = location.state?.loanApplicationId;
-  const loanAmount = location.state?.amount || 0;
-  const savingFee = SAVING_FEES[loanAmount] || 0;
+  const loanAmountFromState = location.state?.amount || 0;
+  
+  // Use custom amount if set, otherwise use amount from state
+  const effectiveAmount = customAmount > 0 ? customAmount : loanAmountFromState;
+  const savingFee = SAVING_FEES[effectiveAmount] || 0;
   const activationFee = savingFee;
+  
+  // Check if coming from dashboard (no loan application)
+  const isDirectPayment = !loanApplicationId;
 
   useEffect(() => {
     if (!loading && !user) {
@@ -76,6 +83,14 @@ export default function Payment() {
       toast({
         title: 'Terms Required',
         description: 'Please agree to the terms and conditions to proceed.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (isDirectPayment && customAmount <= 0) {
+      toast({
+        title: 'Amount Required',
+        description: 'Please select an amount to pay.',
         variant: 'destructive',
       });
       return;
@@ -212,7 +227,10 @@ export default function Payment() {
     setPaymentStatus('idle');
     setShowPhoneInput(false);
     setAgreedToTerms(false);
+    setCustomAmount(0);
   };
+
+  const availableAmounts = Object.keys(SAVING_FEES).map(Number).sort((a, b) => a - b);
 
   if (loading) {
     return (
@@ -314,6 +332,33 @@ export default function Payment() {
             </CardHeader>
 
             <CardContent className="space-y-6">
+              {/* Amount Selection for Direct Payment */}
+              {isDirectPayment && !processing && !showPhoneInput && (
+                <div className="space-y-4">
+                  <Label className="text-sm font-medium">Select Loan Amount</Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {availableAmounts.map((amount) => (
+                      <Button
+                        key={amount}
+                        type="button"
+                        variant={customAmount === amount ? "default" : "outline"}
+                        onClick={() => setCustomAmount(amount)}
+                        className={`py-3 ${
+                          customAmount === amount 
+                            ? 'bg-[#00A650] hover:bg-[#008540] text-white border-[#00A650]' 
+                            : 'border-[#00A650]/30 hover:border-[#00A650] hover:bg-[#00A650]/10'
+                        }`}
+                      >
+                        KES {amount.toLocaleString()}
+                      </Button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Select the loan amount to see the corresponding activation fee.
+                  </p>
+                </div>
+              )}
+
               {/* Fee Breakdown */}
               <div className="bg-[#00A650]/5 border border-[#00A650]/20 p-4 rounded-xl">
                 <div className="flex items-center gap-3 mb-4">
@@ -325,13 +370,19 @@ export default function Payment() {
                 </div>
                 
                 <div className="space-y-2 text-sm">
+                  {isDirectPayment && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Selected Loan Amount</span>
+                      <span className="font-medium">KES {effectiveAmount.toLocaleString()}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Savings & Account Creation Fee</span>
                     <span className="font-medium">KES {savingFee.toLocaleString()}</span>
                   </div>
                   <div className="border-t border-[#00A650]/20 pt-2 mt-2">
                     <div className="flex justify-between">
-                      <span className="font-semibold">Total Amount</span>
+                      <span className="font-semibold">Total Amount to Pay</span>
                       <span className="text-2xl font-bold text-[#00A650]">KES {activationFee.toLocaleString()}</span>
                     </div>
                   </div>
