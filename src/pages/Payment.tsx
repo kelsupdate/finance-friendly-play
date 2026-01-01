@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -12,7 +12,23 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { CheckCircle, Loader2, Phone, XCircle, Shield, Wallet } from 'lucide-react';
 import mpesaLogo from '@/assets/mpesa-logo.png';
-import type { RealtimeChannel } from '@supabase/supabase-js';
+
+const SAVING_FEES: Record<number, number> = {
+  2000: 100,
+  3500: 150,
+  5000: 200,
+  6500: 300,
+  8000: 400,
+  10000: 500,
+  12500: 600,
+  14000: 800,
+  16000: 960,
+  20000: 1200,
+  25000: 1400,
+  30000: 1800,
+  35000: 2000,
+  50000: 2400,
+};
 
 export default function Payment() {
   const { user, loading } = useAuth();
@@ -25,23 +41,11 @@ export default function Payment() {
   const [paymentStatus, setPaymentStatus] = useState<'idle' | 'processing' | 'success' | 'failed'>('idle');
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [showPhoneInput, setShowPhoneInput] = useState(false);
-  const [currentExternalRef, setCurrentExternalRef] = useState<string | null>(null);
-
-  const channelRef = useRef<RealtimeChannel | null>(null);
-  const timeoutRef = useRef<number | null>(null);
-  const processingRef = useRef(false);
-  const statusRef = useRef<'idle' | 'processing' | 'success' | 'failed'>('idle');
 
   const loanApplicationId = location.state?.loanApplicationId;
-  const activationFee = 500;
-
-  useEffect(() => {
-    processingRef.current = processing;
-  }, [processing]);
-
-  useEffect(() => {
-    statusRef.current = paymentStatus;
-  }, [paymentStatus]);
+  const loanAmount = location.state?.amount || 0;
+  const savingFee = SAVING_FEES[loanAmount] || 0;
+  const activationFee = savingFee;
 
   useEffect(() => {
     if (!loading && !user) {
@@ -54,18 +58,6 @@ export default function Payment() {
       fetchUserPhone();
     }
   }, [user]);
-
-  // Cleanup realtime subscription on unmount
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        window.clearTimeout(timeoutRef.current);
-      }
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-      }
-    };
-  }, []);
 
   const fetchUserPhone = async () => {
     const { data } = await supabase
@@ -89,120 +81,6 @@ export default function Payment() {
       return;
     }
     setShowPhoneInput(true);
-  };
-
-  const applyTerminalStatus = async (newStatus: 'completed' | 'failed', channel?: RealtimeChannel) => {
-    if (timeoutRef.current) {
-      window.clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-
-    if (newStatus === 'completed') {
-      setPaymentStatus('success');
-      setProcessing(false);
-
-      if (loanApplicationId) {
-        await supabase
-          .from('loan_applications')
-          .update({ payment_verified: true })
-          .eq('id', loanApplicationId);
-      }
-
-      toast({
-        title: 'Payment Successful!',
-        description: 'Your account has been activated.',
-      });
-    } else {
-      setPaymentStatus('failed');
-      setProcessing(false);
-
-      toast({
-        title: 'Payment Failed',
-        description: 'The payment was not completed. Please try again.',
-        variant: 'destructive',
-      });
-    }
-
-    if (channel) {
-      supabase.removeChannel(channel);
-      if (channelRef.current === channel) {
-        channelRef.current = null;
-      }
-    }
-  };
-
-  // Subscribe to realtime payment updates
-  const subscribeToPaymentUpdates = (externalReference: string) => {
-    console.log('Subscribing to payment updates for:', externalReference);
-
-    setCurrentExternalRef(externalReference);
-
-    if (timeoutRef.current) {
-      window.clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-
-    // Remove existing channel if any
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
-      channelRef.current = null;
-    }
-
-    const channel = supabase
-      .channel(`payment-${externalReference}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'payments',
-          filter: `external_reference=eq.${externalReference}`,
-        },
-        async (payload) => {
-          console.log('Payment update received:', payload);
-          const newStatus = (payload.new as any)?.status as string | undefined;
-          if (newStatus === 'completed' || newStatus === 'failed') {
-            await applyTerminalStatus(newStatus, channel);
-          }
-        }
-      )
-      .subscribe(async (status) => {
-        console.log('Subscription status:', status);
-        if (status === 'SUBSCRIBED') {
-          // Prevent missing the event if callback finished before we subscribed
-          const { data, error } = await supabase
-            .from('payments')
-            .select('status')
-            .eq('external_reference', externalReference)
-            .maybeSingle();
-
-          if (!error) {
-            const existing = data?.status;
-            if (existing === 'completed' || existing === 'failed') {
-              await applyTerminalStatus(existing, channel);
-            }
-          }
-        }
-      });
-
-    channelRef.current = channel;
-
-    // Timeout fallback (90 seconds)
-    timeoutRef.current = window.setTimeout(() => {
-      if (processingRef.current && statusRef.current === 'processing') {
-        setPaymentStatus('failed');
-        setProcessing(false);
-        toast({
-          title: 'Payment Timeout',
-          description: 'Payment verification timed out. Please check your M-Pesa and try again if needed.',
-          variant: 'destructive',
-        });
-        supabase.removeChannel(channel);
-        if (channelRef.current === channel) {
-          channelRef.current = null;
-        }
-      }
-    }, 90000);
   };
 
   const initiateSTKPush = async () => {
@@ -251,15 +129,12 @@ export default function Payment() {
       if (error) throw error;
 
       if (data.success) {
-        setCurrentExternalRef(data.external_reference);
-        
         toast({
           title: 'STK Push Sent!',
           description: 'Please check your phone and enter your M-Pesa PIN to complete payment.',
         });
 
-        // Subscribe to realtime updates
-        subscribeToPaymentUpdates(data.external_reference);
+        pollPaymentStatus(data.external_reference);
       } else {
         throw new Error(data.message || 'Failed to initiate payment');
       }
@@ -273,6 +148,64 @@ export default function Payment() {
         variant: 'destructive',
       });
     }
+  };
+
+  const pollPaymentStatus = async (externalReference: string) => {
+    let attempts = 0;
+    const maxAttempts = 30;
+
+    const checkStatus = async () => {
+      attempts++;
+      
+      const { data } = await supabase
+        .from('payments')
+        .select('status')
+        .eq('external_reference', externalReference)
+        .maybeSingle();
+
+      if (data?.status === 'completed') {
+        setPaymentStatus('success');
+        setProcessing(false);
+        
+        if (loanApplicationId) {
+          await supabase
+            .from('loan_applications')
+            .update({ payment_verified: true })
+            .eq('id', loanApplicationId);
+        }
+
+        toast({
+          title: 'Payment Successful!',
+          description: 'Your account has been activated.',
+        });
+        return;
+      }
+
+      if (data?.status === 'failed') {
+        setPaymentStatus('failed');
+        setProcessing(false);
+        toast({
+          title: 'Payment Failed',
+          description: 'The payment was not completed. Please try again.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      if (attempts < maxAttempts) {
+        setTimeout(checkStatus, 2000);
+      } else {
+        setPaymentStatus('failed');
+        setProcessing(false);
+        toast({
+          title: 'Payment Timeout',
+          description: 'Payment verification timed out. Please check your M-Pesa and try again if needed.',
+          variant: 'destructive',
+        });
+      }
+    };
+
+    setTimeout(checkStatus, 3000);
   };
 
   const resetPayment = () => {
@@ -393,17 +326,13 @@ export default function Payment() {
                 
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Savings Fee</span>
-                    <span className="font-medium">KES 300</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Account Creation Fee</span>
-                    <span className="font-medium">KES 200</span>
+                    <span className="text-muted-foreground">Savings & Account Creation Fee</span>
+                    <span className="font-medium">KES {savingFee.toLocaleString()}</span>
                   </div>
                   <div className="border-t border-[#00A650]/20 pt-2 mt-2">
                     <div className="flex justify-between">
                       <span className="font-semibold">Total Amount</span>
-                      <span className="text-2xl font-bold text-[#00A650]">KES {activationFee}</span>
+                      <span className="text-2xl font-bold text-[#00A650]">KES {activationFee.toLocaleString()}</span>
                     </div>
                   </div>
                 </div>
@@ -425,7 +354,7 @@ export default function Payment() {
                 <div className="space-y-4">
                   <div className="bg-muted/50 p-4 rounded-lg text-sm text-muted-foreground">
                     <p className="mb-2">
-                      By proceeding, you agree to pay the one-time savings and account creation fee of <strong>KES 500</strong>. 
+                      By proceeding, you agree to pay the one-time savings and account creation fee of <strong>KES {activationFee.toLocaleString()}</strong>.
                       This fee is required to activate your Nyota Fund account and process your loan application.
                     </p>
                     <p className="text-xs">
@@ -441,7 +370,7 @@ export default function Payment() {
                       className="mt-0.5 border-[#00A650] data-[state=checked]:bg-[#00A650]"
                     />
                     <Label htmlFor="terms" className="text-sm cursor-pointer">
-                      I agree to pay the savings and account creation fee of <strong>KES 500</strong> and accept the terms and conditions of Nyota Fund.
+                      I agree to pay the savings and account creation fee of <strong>KES {activationFee.toLocaleString()}</strong> and accept the terms and conditions of Nyota Fund.
                     </Label>
                   </div>
 
