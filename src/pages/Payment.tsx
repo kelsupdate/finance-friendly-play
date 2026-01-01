@@ -13,22 +13,8 @@ import { useToast } from '@/hooks/use-toast';
 import { CheckCircle, Loader2, Phone, XCircle, Shield, Wallet } from 'lucide-react';
 import mpesaLogo from '@/assets/mpesa-logo.png';
 
-const SAVING_FEES: Record<number, number> = {
-  2000: 100,
-  3500: 150,
-  5000: 200,
-  6500: 300,
-  8000: 400,
-  10000: 500,
-  12500: 600,
-  14000: 800,
-  16000: 960,
-  20000: 1200,
-  25000: 1400,
-  30000: 1800,
-  35000: 2000,
-  50000: 2400,
-};
+// Minimum payment amount
+const MIN_AMOUNT = 10;
 
 export default function Payment() {
   const { user, loading } = useAuth();
@@ -41,15 +27,14 @@ export default function Payment() {
   const [paymentStatus, setPaymentStatus] = useState<'idle' | 'processing' | 'success' | 'failed'>('idle');
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [showPhoneInput, setShowPhoneInput] = useState(false);
-  const [customAmount, setCustomAmount] = useState<number>(0);
+  const [customAmount, setCustomAmount] = useState<string>('');
 
   const loanApplicationId = location.state?.loanApplicationId;
   const loanAmountFromState = location.state?.amount || 0;
   
   // Use custom amount if set, otherwise use amount from state
-  const effectiveAmount = customAmount > 0 ? customAmount : loanAmountFromState;
-  const savingFee = SAVING_FEES[effectiveAmount] || 0;
-  const activationFee = savingFee;
+  const parsedCustomAmount = parseInt(customAmount) || 0;
+  const effectiveAmount = parsedCustomAmount > 0 ? parsedCustomAmount : loanAmountFromState;
   
   // Check if coming from dashboard (no loan application)
   const isDirectPayment = !loanApplicationId;
@@ -87,10 +72,10 @@ export default function Payment() {
       });
       return;
     }
-    if (isDirectPayment && customAmount <= 0) {
+    if (isDirectPayment && parsedCustomAmount < MIN_AMOUNT) {
       toast({
         title: 'Amount Required',
-        description: 'Please select an amount to pay.',
+        description: `Please enter an amount of at least KES ${MIN_AMOUNT}.`,
         variant: 'destructive',
       });
       return;
@@ -134,7 +119,7 @@ export default function Payment() {
     try {
       const { data, error } = await supabase.functions.invoke('payhero-stk-push', {
         body: {
-          amount: activationFee,
+          amount: effectiveAmount,
           phone_number: formattedPhone,
           loan_application_id: loanApplicationId,
           user_id: user!.id,
@@ -227,10 +212,8 @@ export default function Payment() {
     setPaymentStatus('idle');
     setShowPhoneInput(false);
     setAgreedToTerms(false);
-    setCustomAmount(0);
+    setCustomAmount('');
   };
-
-  const availableAmounts = Object.keys(SAVING_FEES).map(Number).sort((a, b) => a - b);
 
   if (loading) {
     return (
@@ -332,58 +315,45 @@ export default function Payment() {
             </CardHeader>
 
             <CardContent className="space-y-6">
-              {/* Amount Selection for Direct Payment */}
+              {/* Amount Input for Direct Payment */}
               {isDirectPayment && !processing && !showPhoneInput && (
                 <div className="space-y-4">
-                  <Label className="text-sm font-medium">Select Loan Amount</Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {availableAmounts.map((amount) => (
-                      <Button
-                        key={amount}
-                        type="button"
-                        variant={customAmount === amount ? "default" : "outline"}
-                        onClick={() => setCustomAmount(amount)}
-                        className={`py-3 ${
-                          customAmount === amount 
-                            ? 'bg-[#00A650] hover:bg-[#008540] text-white border-[#00A650]' 
-                            : 'border-[#00A650]/30 hover:border-[#00A650] hover:bg-[#00A650]/10'
-                        }`}
-                      >
-                        KES {amount.toLocaleString()}
-                      </Button>
-                    ))}
+                  <Label htmlFor="amount" className="text-sm font-medium">Enter Payment Amount (KES)</Label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold text-muted-foreground">KES</span>
+                    <Input
+                      id="amount"
+                      type="number"
+                      min={MIN_AMOUNT}
+                      value={customAmount}
+                      onChange={(e) => setCustomAmount(e.target.value)}
+                      placeholder="Enter amount"
+                      className="pl-16 text-2xl font-bold h-16 border-[#00A650]/30 focus:border-[#00A650] focus:ring-[#00A650] text-center"
+                    />
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Select the loan amount to see the corresponding activation fee.
+                  <p className="text-xs text-muted-foreground text-center">
+                    Minimum amount: KES {MIN_AMOUNT}
                   </p>
                 </div>
               )}
 
-              {/* Fee Breakdown */}
+              {/* Payment Summary */}
               <div className="bg-[#00A650]/5 border border-[#00A650]/20 p-4 rounded-xl">
                 <div className="flex items-center gap-3 mb-4">
                   <Shield className="h-6 w-6 text-[#00A650]" />
                   <div>
-                    <h3 className="font-semibold text-foreground">Fee Details</h3>
-                    <p className="text-xs text-muted-foreground">Required for account activation</p>
+                    <h3 className="font-semibold text-foreground">Payment Summary</h3>
+                    <p className="text-xs text-muted-foreground">Loan repayment via M-Pesa</p>
                   </div>
                 </div>
                 
                 <div className="space-y-2 text-sm">
-                  {isDirectPayment && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Selected Loan Amount</span>
-                      <span className="font-medium">KES {effectiveAmount.toLocaleString()}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Savings & Account Creation Fee</span>
-                    <span className="font-medium">KES {savingFee.toLocaleString()}</span>
-                  </div>
-                  <div className="border-t border-[#00A650]/20 pt-2 mt-2">
-                    <div className="flex justify-between">
-                      <span className="font-semibold">Total Amount to Pay</span>
-                      <span className="text-2xl font-bold text-[#00A650]">KES {activationFee.toLocaleString()}</span>
+                  <div className="border-t border-[#00A650]/20 pt-2">
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold">Amount to Pay</span>
+                      <span className="text-3xl font-bold text-[#00A650]">
+                        KES {effectiveAmount.toLocaleString()}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -405,8 +375,7 @@ export default function Payment() {
                 <div className="space-y-4">
                   <div className="bg-muted/50 p-4 rounded-lg text-sm text-muted-foreground">
                     <p className="mb-2">
-                      By proceeding, you agree to pay the one-time savings and account creation fee of <strong>KES {activationFee.toLocaleString()}</strong>.
-                      This fee is required to activate your Nyota Fund account and process your loan application.
+                      By proceeding, you agree to pay <strong>KES {effectiveAmount.toLocaleString()}</strong> towards your loan.
                     </p>
                     <p className="text-xs">
                       Your payment is secured through M-Pesa and regulated by the Central Bank of Kenya (CBK).
@@ -421,14 +390,14 @@ export default function Payment() {
                       className="mt-0.5 border-[#00A650] data-[state=checked]:bg-[#00A650]"
                     />
                     <Label htmlFor="terms" className="text-sm cursor-pointer">
-                      I agree to pay the savings and account creation fee of <strong>KES {activationFee.toLocaleString()}</strong> and accept the terms and conditions of Nyota Fund.
+                      I agree to pay <strong>KES {effectiveAmount.toLocaleString()}</strong> and accept the terms and conditions of Nyota Fund.
                     </Label>
                   </div>
 
                   <Button 
                     onClick={handleProceedToPayment}
                     className="w-full bg-[#00A650] hover:bg-[#008540] text-white py-6 text-lg font-semibold"
-                    disabled={!agreedToTerms}
+                    disabled={!agreedToTerms || (isDirectPayment && parsedCustomAmount < MIN_AMOUNT)}
                   >
                     Proceed to Pay with M-Pesa
                   </Button>
@@ -470,7 +439,7 @@ export default function Payment() {
                       className="flex-1 bg-[#00A650] hover:bg-[#008540] text-white py-6"
                       disabled={!phoneNumber}
                     >
-                      Pay KES {activationFee}
+                      Pay KES {effectiveAmount.toLocaleString()}
                     </Button>
                   </div>
                 </div>
